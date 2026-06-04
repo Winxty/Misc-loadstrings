@@ -1,4 +1,4 @@
--- Stable Universal Unlocker v2 - Fixed ViewModel + Proper Override
+-- Clean Universal Unlocker - Fixed Skins + UI Refresh
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -12,12 +12,12 @@ pcall(function()
     ClientItem = require(player.PlayerScripts.Modules.ClientReplicatedClasses.ClientFighter.ClientItem)
 end)
 
-local equipped = {}  
+local equipped = {}  -- weaponName → {Skin = data, Charm = data, Wrap = data, ...}
 
 local function cloneCosmetic(name, cosmeticType)
     local base = CosmeticLibrary.Cosmetics[name]
     if not base then 
-        warn("Cosmetic not found:", name)
+        warn("❌ Cosmetic not found:", name)
         return nil 
     end
     local data = table.clone(base)
@@ -27,7 +27,7 @@ local function cloneCosmetic(name, cosmeticType)
     return data
 end
 
--- ==================== HOOKS ====================
+-- ==================== OWNERSHIP HOOKS ====================
 
 local originalOwns = CosmeticLibrary.OwnsCosmetic
 CosmeticLibrary.OwnsCosmetic = function(self, inventory, name, weapon)
@@ -39,17 +39,23 @@ CosmeticLibrary.OwnsCosmetic = function(self, inventory, name, weapon)
     return originalOwns(self, inventory, name, weapon)
 end
 
+-- Special overrides for Skins (important for some games)
+CosmeticLibrary.OwnsCosmeticNormally = function() return true end
+CosmeticLibrary.OwnsCosmeticUniversally = function() return true end
+CosmeticLibrary.OwnsCosmeticForWeapon = function() return true end
+
+-- ==================== DATA HOOKS ====================
+
 local originalGet = DataController.Get
 DataController.Get = function(self, key)
-    local success, data = pcall(originalGet, self, key)
-    if not success then return nil end
-
+    local data = originalGet(self, key)
+    
     if key == "CosmeticInventory" then
         return setmetatable({}, {
-            __index = function(_, name)
+            __index = function(_, k)
                 for _, cosmetics in pairs(equipped) do
                     for _, c in pairs(cosmetics) do
-                        if c and c.Name == name then return true end
+                        if c and c.Name == k then return true end
                     end
                 end
                 return nil
@@ -61,8 +67,8 @@ end
 
 local originalWeaponData = DataController.GetWeaponData
 DataController.GetWeaponData = function(self, weaponName)
-    local success, data = pcall(originalWeaponData, self, weaponName)
-    if not success or not data then return nil end
+    local data = originalWeaponData(self, weaponName)
+    if not data then return nil end
 
     local merged = table.clone(data)
     merged.Name = weaponName
@@ -75,76 +81,105 @@ DataController.GetWeaponData = function(self, weaponName)
     return merged
 end
 
--- ==================== VIEWMODEL FORCE UPDATE ====================
+-- ==================== VIEWMODEL HOOKS (Critical for Skins) ====================
 
-local function ForceUpdateViewModel(weaponName)
-    pcall(function()
-        local character = player.Character or player.CharacterAdded:Wait()
-        local tool = character:FindFirstChild(weaponName) or character:FindFirstChildWhichIsA("Tool")
-        if tool then
-            -- Common method in many games
-            for _, v in pairs(tool:GetDescendants()) do
-                if v:IsA("ViewModel") or v.Name == "ViewModel" then
-                    v:Destroy()
-                    break
-                end
-            end
-        end
-        
-        if DataController.CurrentData then
-            DataController.CurrentData:Replicate("WeaponInventory")
-            task.wait(0.1)
-            DataController.CurrentData:Replicate("WeaponInventory")
-        end
-    end)
-end
+local constructingWeapon = nil
 
--- ViewModel Hook
 if ClientItem and ClientItem._CreateViewModel then
     local orig = ClientItem._CreateViewModel
-    ClientItem._CreateViewModel = function(self, ref)
+    ClientItem._CreateViewModel = function(self, viewmodelRef)
         local weaponName = self.Name
         local isLocal = self.ClientFighter and self.ClientFighter.Player == player
+        constructingWeapon = isLocal and weaponName or nil
 
-        if isLocal and equipped[weaponName] and ref then
-            local success, dataKey = pcall(self.ToEnum, self, "Data")
-            if success and dataKey and ref[dataKey] then
+        if isLocal and equipped[weaponName] and viewmodelRef then
+            local dataKey = self:ToEnum("Data")
+            if viewmodelRef[dataKey] then
                 for t, cosmetic in pairs(equipped[weaponName]) do
-                    local s, enum = pcall(self.ToEnum, self, t)
-                    if s and enum then
-                        ref[dataKey][enum] = cosmetic
+                    local success, enum = pcall(self.ToEnum, self, t)
+                    if success and enum then
+                        viewmodelRef[dataKey][enum] = cosmetic
+                        viewmodelRef[dataKey][self:ToEnum("Name")] = cosmetic.Name
                     end
                 end
             end
         end
-        return orig(self, ref)
+
+        local result = orig(self, viewmodelRef)
+        constructingWeapon = nil
+        return result
     end
+end
+
+-- Extra hook for ClientViewModel.new (very important for skins)
+pcall(function()
+    local viewModelModule = player.PlayerScripts.Modules.ClientReplicatedClasses.ClientFighter.ClientItem:FindFirstChild("ClientViewModel")
+    if viewModelModule then
+        local ClientViewModel = require(viewModelModule)
+        local originalNew = ClientViewModel.new
+        
+        ClientViewModel.new = function(replicatedData, clientItem)
+            local weaponName = constructingWeapon or clientItem.Name
+            local isLocal = clientItem.ClientFighter and clientItem.ClientFighter.Player == player
+
+            if isLocal and equipped[weaponName] then
+                local ReplicatedClass = require(ReplicatedStorage.Modules.ReplicatedClass)
+                local dataKey = ReplicatedClass:ToEnum("Data")
+                replicatedData[dataKey] = replicatedData[dataKey] or {}
+
+                for t, cosmetic in pairs(equipped[weaponName]) do
+                    local success, enum = pcall(ReplicatedClass.ToEnum, ReplicatedClass, t)
+                    if success and enum then
+                        replicatedData[dataKey][enum] = cosmetic
+                    end
+                end
+            end
+            return originalNew(replicatedData, clientItem)
+        end
+    end
+end)
+
+-- ==================== REMOTE HOOK (Block Equip) ====================
+
+local equipRemote = ReplicatedStorage:FindFirstChild("Remotes", true) 
+    and ReplicatedStorage.Remotes:FindFirstChild("Data", true)
+    and ReplicatedStorage.Remotes.Data:FindFirstChild("EquipCosmetic")
+
+if equipRemote and hookmetamethod then
+    local oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+        if self == equipRemote and getnamecallmethod() == "FireServer" then
+            return -- Block real equip
+        end
+        return oldNamecall(self, ...)
+    end)
+end
+
+-- ==================== FORCE REFRESH ====================
+
+local function ForceRefresh(weaponName)
+    pcall(function()
+        if DataController.CurrentData then
+            DataController.CurrentData:Replicate("WeaponInventory")
+            task.wait(0.1)
+            DataController.CurrentData:Replicate("WeaponInventory")
+            task.wait(0.1)
+            DataController.CurrentData:Replicate("CosmeticInventory")
+        end
+    end)
 end
 
 -- ==================== MAIN FUNCTIONS ====================
 
 local function Unlock(weaponName, cosmeticType, cosmeticName)
     if not weaponName or not cosmeticType or not cosmeticName then
-        warn("Unlock Usage: Unlock(weaponName, type, cosmeticName)")
+        warn("Usage: Unlock(weaponName, type, cosmeticName)")
         return
     end
 
     equipped[weaponName] = equipped[weaponName] or {}
-    
-    -- Clear previous cosmetic of same type (fixes override issue)
-    equipped[weaponName][cosmeticType] = nil
-    
     equipped[weaponName][cosmeticType] = cloneCosmetic(cosmeticName, cosmeticType)
 
-    pcall(function()
-        if DataController.CurrentData then
-            DataController.CurrentData:Replicate("WeaponInventory")
-            task.wait(0.15)
-            DataController.CurrentData:Replicate("WeaponInventory")
-        end
-    end)
-
-    ForceUpdateViewModel(weaponName)
+    ForceRefresh(weaponName)
 
     print(`✅ Unlocked → {weaponName} | {cosmeticType} = {cosmeticName}`)
 end
@@ -164,19 +199,13 @@ local function Lock(weaponName, cosmeticType, cosmeticName)
         equipped[weaponName] = nil
     end
 
-    pcall(function()
-        if DataController.CurrentData then
-            DataController.CurrentData:Replicate("WeaponInventory")
-        end
-    end)
+    ForceRefresh(weaponName)
 
-    ForceUpdateViewModel(weaponName)
-
-    print(`🔒 Locked → {weaponName} | {cosmeticType}{cosmeticName and (" = "..cosmeticName) or ""}`)
+    print(`🔒 Locked → {weaponName} | {cosmeticType}{cosmeticName and (" = " .. cosmeticName) or ""}`)
 end
 
 return {
     Unlock = Unlock,
     Lock = Lock,
-    ForceUpdate = ForceUpdateViewModel
+    ForceRefresh = ForceRefresh
 }
