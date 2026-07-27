@@ -8,7 +8,7 @@ local Players = cloneref(gs('Players'))
 local Workspace = cloneref(gs('Workspace'))
 local RunService = cloneref(gs('RunService'))
 
-Api.ApiVersion = "Polaris 1.1"
+Api.ApiVersion = "1"
 
 
 function Api.ClientIsLoaded()
@@ -157,21 +157,21 @@ function Api.SearchGc(search, includeTables)
 		if typeof(v) == "function" then
 			local info = debug.getinfo(v)
 
-			if info.name == search then
+			if info.name:lower():find(search:lower()) then
 				found = true
 			end
 
 		elseif typeof(v) == "table" then
-			if table.find(v, search) or rawget(v, search) then
+			if table.find(v:lower(), search:lower()) or rawget(v:lower(), search:lower()) then
 				found = true
 			end
 
 		elseif typeof(v) == "string" then
-			if v == search then
+			if v:lower():find(search:lower()) then
 				found = true
 			end
 
-		elseif v == search then
+		elseif v:lower():find(search:lower()) then
 			found = true
 		end
 
