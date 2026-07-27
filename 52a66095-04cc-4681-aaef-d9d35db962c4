@@ -8,7 +8,7 @@ local Players = cloneref(gs('Players'))
 local Workspace = cloneref(gs('Workspace'))
 local RunService = cloneref(gs('RunService'))
 
-Api.ApiVersion = "1"
+Api.ApiVersion = "Polaris 1.1"
 
 
 function Api.ClientIsLoaded()
@@ -70,7 +70,7 @@ function Api.GetPosition(part, round)
 	end
 end
 
-function Api:GetCFrame(object, round)
+function Api.GetCFrame(object, round)
 	local cframe
 
 	if object:IsA("BasePart") then
@@ -92,7 +92,7 @@ function Api:GetCFrame(object, round)
 	end
 end
 
-function Api:GetLookVector(object, round)
+function Api.GetLookVector(object, round)
 	local look
 
 	if object:IsA("BasePart") then
@@ -114,11 +114,11 @@ function Api:GetLookVector(object, round)
 	end
 end
 
-function Api:IsAvailable(func)
+function Api.IsAvailable(func)
 	return typeof(func) == "function"
 end
 
-function Api:RayIgnore(origin, direction, ignore, water)
+function Api.RayIgnore(origin, direction, ignore, water)
 	local params = RaycastParams.new()
 	params.FilterDescendantsInstances = ignore or {}
 	params.FilterType = Enum.RaycastFilterType.Exclude
@@ -131,7 +131,7 @@ function Api:RayIgnore(origin, direction, ignore, water)
 	return {Instance = result.Instance, Position = result.Position, Distance = result.Distance, Material = result.Material, Normal = result.Normal}
 end
 
-function Api:RayInclude(origin, direction, include, water)
+function Api.RayInclude(origin, direction, include, water)
 	local params = RaycastParams.new()
 	params.FilterDescendantsInstances = include or {}
 	params.FilterType = Enum.RaycastFilterType.Include
@@ -144,11 +144,11 @@ function Api:RayInclude(origin, direction, include, water)
 	return {Instance = result.Instance, Position = result.Position, Distance = result.Distance, Material = result.Material, Normal = result.Normal}
 end
 
-function Api:Dist(v1, v2)
+function Api.Dist(v1, v2)
 	return (v1 - v2).Magnitude
 end
 
-function Api:SearchGc(search, includeTables)
+function Api.SearchGc(search, includeTables)
 	local results = {}
 
 	for _, v in pairs(getgc(includeTables)) do
