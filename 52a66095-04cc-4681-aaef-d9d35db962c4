@@ -185,7 +185,7 @@ function Api.SearchGc(search, includeTables)
 end
 
 function Api.GetGame()
-	return {GameId = game.GameId, JobId = game.JobId, PlaceId = game.PlaceId, Name = MarketplaceService:GetProductInfo(game.PlaceId), IsPrivateServer = game.PrivateServerId ~= "",}
+	return {GameId = game.GameId, JobId = game.JobId, PlaceId = game.PlaceId, Name = MarketplaceService:GetProductInfo(game.PlaceId)}
 end
 
 
