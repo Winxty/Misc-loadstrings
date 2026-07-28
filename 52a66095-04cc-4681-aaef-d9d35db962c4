@@ -9,7 +9,8 @@ local Workspace = cloneref(gs('Workspace'))
 local RunService = cloneref(gs('RunService'))
 local MarketplaceService = cloneref(gs('MarketplaceService'))
 
-Api.ApiVersion = "Polaris 1.2"
+Api.ApiVersion = "Polaris 1.3"
+Api._connections = {}
 
 
 function Api.ClientIsLoaded()
@@ -149,46 +150,50 @@ function Api.Dist(v1, v2)
 	return (v1 - v2).Magnitude
 end
 
-function Api.SearchGc(search, includeTables)
-	local results = {}
-
-	for _, v in pairs(getgc(includeTables)) do
-		local found = false
-
-		if typeof(v) == "function" then
-			local info = debug.getinfo(v)
-
-			if info.name:lower():find(search:lower()) then
-				found = true
-			end
-
-		elseif typeof(v) == "table" then
-			if table.find(v:lower(), search:lower()) or rawget(v:lower(), search:lower()) then
-				found = true
-			end
-
-		elseif typeof(v) == "string" then
-			if v:lower():find(search:lower()) then
-				found = true
-			end
-
-		elseif v:lower():find(search:lower()) then
-			found = true
-		end
-
-		if found then
-			table.insert(results, v)
-		end
-	end
-
-	return results
-end
-
 function Api.GetGame()
-	return {GameId = game.GameId, JobId = game.JobId, PlaceId = game.PlaceId, Name = MarketplaceService:GetProductInfo(game.PlaceId)}
+	return {GameId = game.GameId, JobId = game.JobId, PlaceId = game.PlaceId, Name = MarketplaceService:GetProductInfo(game.PlaceId), IsPrivateServer = game.PrivateServerId ~= "",}
 end
 
+function Api.SafeRequire(module)
+	local ok, result = pcall(require, module)
+	if ok then return result end
 
+	return false
+end
+
+function Api.WorldToScreen(camera, position)
+	local screenPos, onScreen = camera:WorldToViewportPoint(position)
+	return Vector2.new(screenPos.X, screenPos.Y), onScreen, screenPos.Z
+end
+
+function Api.SafeCall(fn, ...)
+	local args = {...}
+	local ok, result = pcall(function() return fn(unpack(args)) end)
+	if ok then return result end
+	return nil, result
+end
+
+function Api.Connect(signal, fn)
+	local conn = signal:Connect(fn)
+	table.insert(Api._connections, conn)
+	return conn
+end
+
+function Api.DisconnectAll()
+	for _, conn in ipairs(Api._connections) do
+		if conn.Connected then conn:Disconnect() end
+	end
+	table.clear(Api._connections)
+end
+
+function Api.WaitFor(predicate, timeout)
+	local start = tick()
+	while not predicate() do
+		if timeout and (tick() - start) > timeout then return false end
+		RunService.Heartbeat:Wait()
+	end
+	return true
+end
 
 
 return Api
