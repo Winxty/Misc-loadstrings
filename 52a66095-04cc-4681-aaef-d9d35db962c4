@@ -7,8 +7,9 @@ end
 local Players = cloneref(gs('Players'))
 local Workspace = cloneref(gs('Workspace'))
 local RunService = cloneref(gs('RunService'))
+local MarketplaceService = cloneref(gs('MarketplaceService'))
 
-Api.ApiVersion = "1"
+Api.ApiVersion = "Polaris 1.2"
 
 
 function Api.ClientIsLoaded()
@@ -181,6 +182,10 @@ function Api.SearchGc(search, includeTables)
 	end
 
 	return results
+end
+
+function Api.GetGame()
+	return {GameId = game.GameId, JobId = game.JobId, PlaceId = game.PlaceId, Name = MarketplaceService:GetProductInfo(game.PlaceId), IsPrivateServer = game.PrivateServerId ~= "",}
 end
 
 
