@@ -171,7 +171,7 @@ function Api.GetServices()
     for _, Name in ipairs(ServiceNames) do
         local Success, Service = pcall(function()
 			return gs(name)
-		ebd)
+		end)
 
         if Success and Service then
             Services[Name] = Service
