@@ -1,17 +1,104 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Api = {}
 
+cloneref = (cloneref or function(a)
+	return a
+end)
+
 local function gs(s)
-	return game:GetService(s or tostring(s))
+	return cloneref(game:GetService(s or tostring(s)))
 end
 
-local Players = cloneref(gs('Players'))
-local Workspace = cloneref(gs('Workspace'))
-local RunService = cloneref(gs('RunService'))
-local MarketplaceService = cloneref(gs('MarketplaceService'))
 
-Api.ApiVersion = "Polaris 1.4"
+local Players = gs('Players')
+local Workspace = gs('Workspace')
+local RunService = gs('RunService')
+local MarketplaceService = gs('MarketplaceService')
+local Uis = gs('UserInputService')
+local HttpService = gs('HttpService')
+
+Api.ApiVersion = "Ver_2.0"
 Api._connections = {}
+Api._caches = {}
 
+
+
+-- Signals
+
+function Api.Connect(name, signal, fn)
+	local conn = signal:Connect(fn)
+	Api._connections[name] = {Signal = signal, Funciton = fn}
+	return conn
+end
+
+function Api.Disconnect(name)
+	for i,v in pairs(Api._connections) do
+		if v == name then
+			v.Signal:Disconnect()
+		end
+	end
+	
+end
+
+function Api.DisconnectAll()
+	for _, conn in ipairs(Api._connections) do
+		if conn.Signal.Connected then conn.Signal:Disconnect() end
+	end
+	table.clear(Api._connections)
+end
+
+function Api.WaitFor(predicate, timeout)
+	local start = tick()
+	while not predicate() do
+		if timeout and (tick() - start) > timeout then return false end
+		RunService.Heartbeat:Wait()
+	end
+	return true
+end
+
+
+-- Cache
+
+function Api.CreateCache(name)
+	local cch = {cache = {}}
+
+	function cch:Set(name, inst)
+		cch.cache[name] = inst
+		return cch.cache[name]
+	end
+
+	function cch:Get(name)
+		return cch.cache[name]
+	end
+
+	function cch:Remove(name)
+		cch.cache[name] = nil
+	end
+
+	function cch:Clear()
+		table.clear(cch.cache)
+	end
+
+	function cch:Destroy()
+		cch = nil
+	end
+
+	Api._caches[name] = cch
+
+
+	return cch
+end
+
+
+
+
+-- Game
+
+function Api.GetGame()
+    local info = MarketplaceService:GetProductInfo(game.PlaceId)
+
+    return {GameId = game.GameId, JobId = game.JobId, PlaceId = game.PlaceId, Name = info.Name, ImageId = info.IconImageAssetId}
+end
 
 function Api.ClientIsLoaded()
 	return game:IsLoaded()
@@ -28,19 +115,331 @@ function Api:GetClient()
 	return {LocalPlayer = Players.LocalPlayer, Character = Players.LocalPlayer.Character}
 end
 
-function Api:IsAlive()
-	local c = Api:GetClient()
-	if not c or not c.Character or not c.LocalPlayer then return false end	
+function Api:GetServices()
+    local Services = {}
 
-	local humanoid = c.Character:FindFirstChildWhichIsA("Humanoid")
+    local ServiceNames = {
+        "Workspace",
+        "Players",
+        "Lighting",
+        "ReplicatedStorage",
+        "RunService",
+        "ServerScriptService",
+        "ServerStorage",
+        "StarterGui",
+        "StarterPack",
+        "StarterPlayer",
+        "SoundService",
+        "TweenService",
+        "TeleportService",
+        "HttpService",
+        "UserInputService",
+        "ContextActionService",
+        "GuiService",
+        "TextChatService",
+        "Chat",
+        "MarketplaceService",
+        "MemoryStoreService",
+        "MessagingService",
+        "DataStoreService",
+        "AssetService",
+        "CollectionService",
+        "PhysicsService",
+        "PathfindingService",
+        "ProximityPromptService",
+        "Debris",
+        "Teams",
+        "SocialService",
+        "PolicyService",
+        "LocalizationService",
+        "VRService",
+        "VoiceChatService",
+        "AvatarEditorService",
+        "InsertService",
+        "GroupService",
+        "BadgeService",
+        "AnalyticsService",
+        "AdService",
+        "CaptureService",
+        "ContentProvider",
+        "KeyframeSequenceProvider",
+        "TestService",
+        "Stats",
+    }
 
-	if humanoid then
-		if humanoid.Health <= 0 then return false end
-	else
-		return false
+    for _, Name in ipairs(ServiceNames) do
+        local Success, Service = pcall(game.GetService, game, Name)
+
+        if Success and Service then
+            Services[Name] = Service
+        end
+    end
+
+    return Services
+end
+
+
+-- LocalPlayer
+
+function Api:IsKeyDown(key)
+	local c = self:GetClient()
+
+	return Uis:IsKeyDown(key)
+end
+
+function Api:IsKeyUp(key)
+	local c = self:GetClient()
+
+	return (Uis:IsKeyDown(key) == false)
+end
+
+function Api:GetMouse()
+	local c = self:GetClient().LocalPlayer:GetMouse()
+	return {Position = Vector2.new(c.X, c.Y), Hit = c.Hit, TargetSurface = c.TargetSurface}
+end
+
+
+
+-- Player
+
+function Api:GetTeam(p)
+    if not p then
+        local client = self:GetClient()
+        if not client then return false end
+        
+        p = client.LocalPlayer
+    end
+
+    if p:IsA("Model") then
+        p = Players:GetPlayerFromCharacter(p)
+    end
+
+    if not p or not p:IsA("Player") then
+        return false
+    end
+
+    return p.Team
+end
+
+function Api:GetFriends(p)
+    if not p then
+        local client = self:GetClient()
+        if not client then return false end
+
+        p = client.LocalPlayer
+    end
+
+    if p:IsA("Model") then
+        p = Players:GetPlayerFromCharacter(p)
+    end
+
+    if not p or not p:IsA("Player") then
+        return false
+    end
+
+    local Friends = {}
+
+    local success, pages = pcall(function()
+        return Players:GetFriendsAsync(p.UserId)
+    end)
+
+    if not success or not pages then
+        return false
+    end
+
+    while true do
+        for _, friend in ipairs(pages:GetCurrentPage()) do
+            table.insert(Friends, {
+                Id = friend.Id,
+                Username = friend.Username,
+                DisplayName = friend.DisplayName,
+                IsOnline = friend.IsOnline
+            })
+        end
+
+        if pages.IsFinished then
+            break
+        end
+
+        pages:AdvanceToNextPageAsync()
+    end
+
+    return Friends
+end
+
+
+
+-- Character
+
+function Api:GetCharacter(c)
+    if not c then
+        local client = self:GetClient()
+        if not client then return end
+        
+        c = client.Character
+    end
+
+    if c:IsA("Player") then
+        c = c.Character
+    end
+
+    return c
+end
+
+function Api:GetHumanoid(c)
+	if not c then c = self:GetClient().Character end
+
+	if not c then return false end
+
+	if c:IsA('Player') then
+		c = self:GetCharacter(c)
 	end
 
-	return true
+	local hum = c:FindFirstChildWhichIsA('Humanoid')
+
+	if hum then
+		return hum
+	end
+
+	return false
+end
+
+function Api:IsAlive(c)
+	if not c then c = self:GetClient().Character end
+
+	if not c then return false end
+
+	local hum = self:GetHumanoid(c)
+
+	if not hum then return false end
+	
+	return (hum.Health >= 0)
+end
+
+function Api:GetState(c)
+	if not c then c = self:GetClient().Character end
+
+	if not c then return false end
+
+	local hum = self:GetHumanoid(c)
+
+	if not hum then return false end
+
+	return hum:GetState()
+end
+
+function Api:GetRoot(c)
+	if not c then c = self:GetClient().Character end
+
+	if not c then return false end
+
+	if c:IsA('Player') then
+		c = self:GetCharacter(c)
+	end
+
+	if c.PrimaryPart then
+		return c.PrimaryPart
+	end
+
+	return false
+end
+
+function Api:GetVelocity(c)
+	if not c then c = self:GetClient().Character end
+
+	if not c then return false end
+
+	if c:IsA('Player') then
+		c = self:GetCharacter(c)
+	end
+
+	local hrp = c:FindFirstChild('HumanoidRootPart')
+
+	if hrp then
+		return hrp.AssemblyLinearVelocity.Magnitude
+	end
+
+	return false
+end
+
+function Api:IsAirborne(c)
+	local state = self:GetState(c)
+	if state then
+		if state == Enum.HumanoidStateType.Freefall or state == Enum.HumanoidStateType.Jumping or state == Enum.HumanoidStateType.Flying or state == Enum.HumanoidStateType.FallingDown then
+			return true
+		end
+	end
+
+	return false
+end
+
+
+
+
+-- World
+
+function Api.RayIgnore(origin, direction, ignore, water)
+	local params = RaycastParams.new()
+	params.FilterDescendantsInstances = ignore or {}
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.IgnoreWater = (water == true)
+	
+	local result = Workspace:Raycast(origin, direction, params)
+
+	if not result then return false end
+
+	return {Instance = result.Instance, Position = result.Position, Distance = result.Distance, Material = result.Material, Normal = result.Normal}
+end
+
+function Api.RayInclude(origin, direction, include, water)
+	local params = RaycastParams.new()
+	params.FilterDescendantsInstances = include or {}
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.IgnoreWater = (water == true)
+	
+	local result = Workspace:Raycast(origin, direction, params)
+
+	if not result then return false end
+
+	return {Instance = result.Instance, Position = result.Position, Distance = result.Distance, Material = result.Material, Normal = result.Normal}
+end
+
+function Api.IsNil(inst)
+	for _, v in getnilinstances() do
+		if v == inst then
+			return true
+		end
+	end
+
+	return false
+end
+
+function Api:IsVisible(part)
+	local cam = Workspace.CurrentCamera
+	local char = self:GetClient().Character
+	if not char then return false end
+
+	local ray = self:RayIgnore(cam.Position, part.position, {cam, char}, true)
+
+	if ray.Instance == part then
+		return true
+	end
+
+	return false
+end
+
+
+
+
+-- Math
+
+function Api.WorldToScreen(camera, position)
+	local screenPos, onScreen = camera:WorldToViewportPoint(position)
+	return Vector2.new(screenPos.X, screenPos.Y), onScreen, screenPos.Z
+end
+
+function Api.Dist(v1, v2)
+	return (v1 - v2).Magnitude
 end
 
 function Api.GetPosition(part, round)
@@ -116,54 +515,20 @@ function Api.GetLookVector(object, round)
 	end
 end
 
-function Api.IsAvailable(func)
-	return typeof(func) == "function"
+function Api:CalculateAngle(v1, v2)
+	local delta = v1 - v2
+
+	return math.atan2(delta.Y, delta.X)
 end
 
-function Api.RayIgnore(origin, direction, ignore, water)
-	local params = RaycastParams.new()
-	params.FilterDescendantsInstances = ignore or {}
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.IgnoreWater = water == true
-	
-	local result = Workspace:Raycast(origin, direction, params)
 
-	if not result then return false end
-
-	return {Instance = result.Instance, Position = result.Position, Distance = result.Distance, Material = result.Material, Normal = result.Normal}
-end
-
-function Api.RayInclude(origin, direction, include, water)
-	local params = RaycastParams.new()
-	params.FilterDescendantsInstances = include or {}
-	params.FilterType = Enum.RaycastFilterType.Include
-	params.IgnoreWater = water == true
-	
-	local result = Workspace:Raycast(origin, direction, params)
-
-	if not result then return false end
-
-	return {Instance = result.Instance, Position = result.Position, Distance = result.Distance, Material = result.Material, Normal = result.Normal}
-end
-
-function Api.Dist(v1, v2)
-	return (v1 - v2).Magnitude
-end
-
-function Api.GetGame()
-	return {GameId = game.GameId, JobId = game.JobId, PlaceId = game.PlaceId, Name = MarketplaceService:GetProductInfo(game.PlaceId), IsPrivateServer = game.PrivateServerId ~= "",}
-end
+-- Misc
 
 function Api.MultiRequire(module)
 	local ok, result = pcall(require, module)
 	if ok then return {Code = result, Instance = module} end
 
 	return false
-end
-
-function Api.WorldToScreen(camera, position)
-	local screenPos, onScreen = camera:WorldToViewportPoint(position)
-	return Vector2.new(screenPos.X, screenPos.Y), onScreen, screenPos.Z
 end
 
 function Api.SafeCall(fn, ...)
@@ -173,27 +538,54 @@ function Api.SafeCall(fn, ...)
 	return nil, result
 end
 
-function Api.Connect(signal, fn)
-	local conn = signal:Connect(fn)
-	table.insert(Api._connections, conn)
-	return conn
+function Api.IsAvailable(func)
+	return typeof(func) == "function"
 end
 
-function Api.DisconnectAll()
-	for _, conn in ipairs(Api._connections) do
-		if conn.Connected then conn:Disconnect() end
+function Api:DeepCopy(tbl, seen)
+	if type(tbl) ~= "table" then
+		return tbl
 	end
-	table.clear(Api._connections)
+
+	seen = seen or {}
+
+	if seen[tbl] then
+		return seen[tbl]
+	end
+
+	local copy = {}
+	seen[tbl] = copy
+
+	for k, v in pairs(tbl) do
+		copy[self:DeepCopy(k, seen)] = self:DeepCopy(v, seen)
+	end
+
+	return copy
 end
 
-function Api.WaitFor(predicate, timeout)
-	local start = tick()
-	while not predicate() do
-		if timeout and (tick() - start) > timeout then return false end
-		RunService.Heartbeat:Wait()
+function Api:GetExecutorInfo()
+	local function GetExecutorName()
+		if not identifyexecutor then
+			return "Unknown"
+		end
+
+		local success, result = pcall(identifyexecutor)
+
+		if not success or not result then
+			return "Unknown"
+		end
+
+		result = result:gsub("%s+[%d%.]+.*$", "")
+
+		result = result:match("^%s*(.-)%s*$")
+
+		return result
 	end
-	return true
+	local WeaoExecInfo = request and HttpService:JSONDecode(request({Url = "https://weao.xyz/api/status/exploits/" .. GetExecutorName(), Method = "GET"}).Body)
+
+	return WeaoExecInfo
 end
+
 
 
 return Api
