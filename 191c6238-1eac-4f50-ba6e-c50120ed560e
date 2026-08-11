@@ -116,7 +116,7 @@ function Api:GetClient()
 	return {LocalPlayer = Players.LocalPlayer, Character = Players.LocalPlayer.Character}
 end
 
-function Api:GetServices()
+function Api.GetServices()
     local Services = {}
 
     local ServiceNames = {
