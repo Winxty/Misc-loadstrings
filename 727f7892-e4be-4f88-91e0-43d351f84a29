@@ -1,4 +1,4 @@
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 local Api = {}
 
 cloneref = (cloneref or function(a)
@@ -13,6 +13,7 @@ end
 local Players = gs('Players')
 local Workspace = gs('Workspace')
 local RunService = gs('RunService')
+local ReplicatedStorage = gs("ReplicatedStorage")
 local MarketplaceService = gs('MarketplaceService')
 local Uis = gs('UserInputService')
 local HttpService = gs('HttpService')
@@ -28,23 +29,29 @@ Api.IsLoaded = false
 
 function Api.Connect(name, signal, fn)
 	local conn = signal:Connect(fn)
-	Api._connections[name] = {Signal = signal, Funciton = fn}
+	Api._connections[name] = {Signal = signal, Function = fn}
 	return conn
 end
 
 function Api.Disconnect(name)
-	for i,v in pairs(Api._connections) do
-		if v == name then
-			v.Signal:Disconnect()
-		end
-	end
-	
+    local conn = Api._connections[name]
+
+    if conn then
+        if conn.Signal.Connected then
+            conn.Signal:Disconnect()
+        end
+
+        Api._connections[name] = nil
+    end
 end
 
 function Api.DisconnectAll()
-	for _, conn in ipairs(Api._connections) do
-		if conn.Signal.Connected then conn.Signal:Disconnect() end
+	for _, conn in pairs(Api._connections) do
+		if conn.Signal.Connected then
+			conn.Signal:Disconnect()
+		end
 	end
+
 	table.clear(Api._connections)
 end
 
