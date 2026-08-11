@@ -169,7 +169,9 @@ function Api.GetServices()
     }
 
     for _, Name in ipairs(ServiceNames) do
-        local Success, Service = pcall(game.GetService, game, Name)
+        local Success, Service = pcall(function()
+			return gs(name)
+		ebd)
 
         if Success and Service then
             Services[Name] = Service
