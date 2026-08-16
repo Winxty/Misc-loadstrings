@@ -12,15 +12,52 @@ end
 local Players = gs('Players')
 local Workspace = gs('Workspace')
 local RunService = gs('RunService')
-local ReplicatedStorage = gs("ReplicatedStorage")
 local MarketplaceService = gs('MarketplaceService')
 local Uis = gs('UserInputService')
 local HttpService = gs('HttpService')
 
-Api.Version = "2.2"
+Api.Version = "2.1"
 Api._connections = {}
 Api._caches = {}
 Api.IsLoaded = false
+
+
+function Api:Init()
+	if not identifyexecutor then
+		Players.LocalPlayer:Kick("Your executor cant even identify itself :sob:")
+	end
+
+	local exec = identifyexecutor():lower()
+
+	if exec:find('matcha') then
+		print('Matcha isnt okey')
+		self:CrashClient()
+	end
+
+	if exec:find('yub') or exec:find('nexo') then
+		Players.LocalPlayer:Kick("Lithium dont want these executors to be supported (@lithium.1on on discord)")
+	end
+
+	if exec:find('xeno') or exec:find('solara') then
+		Players.LocalPlayer:Kick("Unsupported executor")
+	end
+
+	local SupportedIds = {
+		17625359962
+	}
+
+	if not SupportedIds[game.GameId] then
+		Players.LocalPlayer:Kick("Unsupported Game")
+	end
+
+	local oldprint = print
+
+	print = function(text)
+		oldprint("[LM] - " .. text)
+	end
+
+	print("Script Initalized on " .. self.GetExecutorInfo().Name)
+end
 
 
 
@@ -101,7 +138,7 @@ end
 
 -- Game
 
-function Api.GetGame()
+function Api.GetGame() 
     local info = MarketplaceService:GetProductInfo(game.PlaceId)
 
     return {GameId = game.GameId, JobId = game.JobId, PlaceId = game.PlaceId, Name = info.Name, ImageId = info.IconImageAssetId}
@@ -205,6 +242,11 @@ end
 function Api:GetMouse()
 	local c = self:GetClient().LocalPlayer:GetMouse()
 	return {Position = Vector2.new(c.X, c.Y), Hit = c.Hit, TargetSurface = c.TargetSurface}
+end
+
+function Api.CrashClient()
+	while true do
+	end
 end
 
 
@@ -572,7 +614,7 @@ function Api:DeepCopy(tbl, seen)
 	return copy
 end
 
-function Api.GetExecutorInfo()
+function  Api.GetExecutorInfo()
     local function GetExecutorName()
         if not identifyexecutor then
             return "Unknown"
