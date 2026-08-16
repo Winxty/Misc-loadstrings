@@ -589,8 +589,9 @@ function Api.SafeCall(fn, ...)
 	return nil, result
 end
 
-function Api.IsAvailable(func)
-	return typeof(func) == "function"
+function Api:IsAvailable(func)
+	local info = self:GetExecutorInfo()
+	return info.Test[tostring(func)]
 end
 
 function Api:DeepCopy(tbl, seen)
