@@ -572,27 +572,50 @@ function Api:DeepCopy(tbl, seen)
 	return copy
 end
 
-function Api:GetExecutorInfo()
-	local function GetExecutorName()
-		if not identifyexecutor then
-			return "Unknown"
-		end
+function Api.GetExecutorInfo()
+    local function GetExecutorName()
+        if not identifyexecutor then
+            return "Unknown"
+        end
 
-		local success, result = pcall(identifyexecutor)
+        local success, result = pcall(identifyexecutor)
 
-		if not success or not result then
-			return "Unknown"
-		end
+        if not success or not result then
+            return "Unknown"
+        end
 
-		result = result:gsub("%s+[%d%.]+.*$", "")
+        result = result:gsub("%s+[%d%.]+.*$", "")
 
-		result = result:match("^%s*(.-)%s*$")
+        result = result:match("^%s*(.-)%s*$")
 
-		return result
-	end
-	local WeaoExecInfo = request and HttpService:JSONDecode(request({Url = "https://weao.xyz/api/status/exploits/" .. GetExecutorName(), Method = "GET"}).Body)
+        return result
+    end
 
-	return WeaoExecInfo
+    local WeaoExecInfo = request and HttpService:JSONDecode(request({Url = "https://weao.xyz/api/status/exploits/" .. GetExecutorName(), Method = "GET"}).Body)
+    local WeaoExecSunc = request and HttpService:JSONDecode(request({Url = "https://weao.xyz/api/sunc?scrap=" .. WeaoExecInfo.sunc.suncScrap .. "&key=" .. WeaoExecInfo.sunc.suncKey .. "", Method = "GET"}).Body)
+
+
+    local CleanedTests = {}
+
+    for i,v in pairs(WeaoExecSunc.tests.passed) do
+        CleanedTests[v.name] = true
+    end
+
+    for i,v in pairs(WeaoExecSunc.tests.failed) do
+        CleanedTests[v.name] = false
+    end
+
+
+    return {
+        Name = WeaoExecInfo.title,
+        Version = WeaoExecInfo.version,
+        HasDecompiler = WeaoExecInfo.decompiler,
+        HasRaknet = WeaoExecInfo.raknet,
+        Outdated = WeaoExecSunc.outdated,
+        RbxVersion = WeaoExecInfo.rbxversion,
+        BypassClientModification = WeaoExecInfo.clientmods,
+        Tests = CleanedTests,
+    }
 end
 
 
