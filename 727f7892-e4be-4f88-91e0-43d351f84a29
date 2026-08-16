@@ -43,7 +43,7 @@ function Api:Init()
 	end
 
 	local SupportedIds = {
-		17625359962
+		6035872082
 	}
 
 	if not SupportedIds[game.GameId] then
