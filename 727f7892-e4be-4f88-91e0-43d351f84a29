@@ -16,7 +16,7 @@ local MarketplaceService = gs('MarketplaceService')
 local Uis = gs('UserInputService')
 local HttpService = gs('HttpService')
 
-Api.Version = "2.4"
+Api.Version = "2.5"
 Api._connections = {}
 Api._caches = {}
 Api.IsLoaded = false
@@ -152,13 +152,6 @@ function Api.CharacterExists()
 	return Players.LocalPlayer and Players.LocalPlayer.Character ~= nil
 end
 
-function Api:GetClient()
-	if not self.ClientIsLoaded() then return false end
-	if not self.CharacterExists() then return false end
-
-	return {LocalPlayer = Players.LocalPlayer, Character = Players.LocalPlayer.Character}
-end
-
 function Api:GetServices()
     local Services = {}
 
@@ -247,6 +240,30 @@ end
 function Api.CrashClient()
 	while true do
 	end
+end
+
+function Api:GetClient()
+	if not self.ClientIsLoaded() then return false end
+	if not self.CharacterExists() then return false end
+
+	return {LocalPlayer = Players.LocalPlayer, Character = Players.LocalPlayer.Character}
+end
+
+function Api.GetModules(loaded)
+	local toreturn = {}
+
+	if loaded then
+		return getloadedmodules()
+	else
+		for i,v in pairs(game:GetDescendants()) do
+			if v:IsA('ModuleScript') then
+				table.insert(toreturn, v)
+			end
+		end
+	end
+
+
+	return toreturn
 end
 
 
@@ -589,9 +606,8 @@ function Api.SafeCall(fn, ...)
 	return nil, result
 end
 
-function Api:IsAvailable(func)
-	local info = self:GetExecutorInfo()
-	return info.Test[tostring(func)]
+function Api.IsAvailable(func)
+	return typeof(func) == "function"
 end
 
 function Api:DeepCopy(tbl, seen)
