@@ -17,7 +17,7 @@ local MarketplaceService = gs('MarketplaceService')
 local Uis = gs('UserInputService')
 local HttpService = gs('HttpService')
 
-Api.Version = "2.1"
+Api.Version = "2.2"
 Api._connections = {}
 Api._caches = {}
 Api.IsLoaded = false
