@@ -42,14 +42,6 @@ function Api:Init()
 		Players.LocalPlayer:Kick("Unsupported executor")
 	end
 
-	local SupportedIds = {
-		6035872082
-	}
-
-	if not SupportedIds[game.GameId] then
-		Players.LocalPlayer:Kick("Unsupported Game")
-	end
-
 	local oldprint = print
 
 	print = function(text)
