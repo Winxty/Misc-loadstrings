@@ -74,11 +74,10 @@ function Api.Disconnect(name)
 end
 
 function Api.ConnectionExists(name)
-	local data = Api._connections[name]
-
-	return data ~= nil
-		and data.Connection ~= nil
-		and data.Connection.Connected
+    local data = Api._connections[name]
+    return data ~= nil
+        and data.Signal ~= nil
+        and data.Signal.Connected
 end
 
 function Api.DisconnectAll()
