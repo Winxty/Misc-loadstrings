@@ -16,7 +16,7 @@ local MarketplaceService = gs('MarketplaceService')
 local Uis = gs('UserInputService')
 local HttpService = gs('HttpService')
 
-Api.Version = "2.5"
+Api.Version = "2.6"
 Api._connections = {}
 Api._caches = {}
 Api.IsLoaded = false
@@ -57,7 +57,7 @@ end
 
 function Api.Connect(name, signal, fn)
 	local conn = signal:Connect(fn)
-	Api._connections[name] = {Signal = signal, Function = fn}
+	Api._connections[name] = {Signal = conn, Function = fn}
 	return conn
 end
 
@@ -71,6 +71,14 @@ function Api.Disconnect(name)
 
         Api._connections[name] = nil
     end
+end
+
+function Api.ConnectionExists(name)
+	local data = Api._connections[name]
+
+	return data ~= nil
+		and data.Connection ~= nil
+		and data.Connection.Connected
 end
 
 function Api.DisconnectAll()
@@ -327,6 +335,19 @@ function Api:GetFriends(p)
     return Friends
 end
 
+function Api.GetPlayers()
+	return Players:GetPlayers()
+end
+
+function Api.GetPlayer(name)
+	return Players:FindFirstChild(name)
+end
+
+function Api.IsTeammate(p1, p2)
+	return Api.GetTeam(p1) == Api.GetTeam(p2)
+end
+
+
 
 
 -- Character
@@ -373,7 +394,7 @@ function Api:IsAlive(c)
 
 	if not hum then return false end
 	
-	return (hum.Health >= 0)
+	return hum.Health > 0
 end
 
 function Api:GetState(c)
@@ -575,10 +596,14 @@ function Api.GetLookVector(object, round)
 	end
 end
 
-function Api:CalculateAngle(v1, v2)
+function Api.CalculateAngle(v1, v2)
 	local delta = v1 - v2
 
 	return math.atan2(delta.Y, delta.X)
+end
+
+function Api.Clamp(value, min, max)
+	return math.clamp(value, min, max)
 end
 
 
@@ -589,6 +614,10 @@ function Api.MultiRequire(module)
 	if ok then return {Code = result, Instance = module} end
 
 	return false
+end
+
+function Api.Delay(seconds, callback)
+	task.delay(seconds, callback)
 end
 
 function Api.SafeCall(fn, ...)
@@ -623,7 +652,7 @@ function Api:DeepCopy(tbl, seen)
 	return copy
 end
 
-function  Api.GetExecutorInfo()
+function Api.GetExecutorInfo()
     local function GetExecutorName()
         if not identifyexecutor then
             return "Unknown"
