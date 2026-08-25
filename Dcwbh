@@ -1,104 +1,62 @@
 local Api = {}
 
-local HttpService = cloneref(game:GetService('HttpService'))
+local HttpService = cloneref(game:GetService("HttpService"))
 
 Api.Webhook = nil
+Api.Queue = {}
 
+function Api:SetWebhook(Link)
+	assert(type(Link) == "string", "Webhook must be a string")
 
-function Api:SetWebhook(link)
-	self.Webhook = link
+	self.Webhook = Link
 end
 
-function Api:Message(Arguments)
-    assert(self.Webhook, "Webhook has not been set")
-    assert(type(Arguments) == "table", "Arguments must be a table")
-
-    local Color = Arguments.Color or Color3.fromRGB(88, 101, 242)
-
-    local ColorInt =
-        math.floor(Color.R * 255) * 256 ^ 2 +
-        math.floor(Color.G * 255) * 256 +
-        math.floor(Color.B * 255)
-
-    local Embed = {
-        title = Arguments.Title,
-        description = Arguments.Message,
-        color = ColorInt
-    }
-
-    if Arguments.Fields then
-        Embed.fields = Arguments.Fields
-    end
-
-    if Arguments.Footer then
-        Embed.footer = {
-            text = Arguments.Footer
-        }
-    end
-
-    if Arguments.Thumbnail then
-        Embed.thumbnail = {
-            url = Arguments.Thumbnail
-        }
-    end
-
-    if Arguments.Image then
-        Embed.image = {
-            url = Arguments.Image
-        }
-    end
-
-    if Arguments.Author then
-        Embed.author = {
-            name = Arguments.Author
-        }
-    end
-
-    return request({
-        Url = self.Webhook,
-        Method = "POST",
-        Headers = {
-            ["Content-Type"] = "application/json"
-        },
-        Body = HttpService:JSONEncode({
-            embeds = { Embed }
-        })
-    })
+function Api:Clear()
+	self.Webhook = nil
+	table.clear(self.Queue)
 end
 
-function Api:Error(Message, Arguments)
+function Api:IsSet()
+	return self.Webhook ~= nil
+end
+
+function Api:Message(Content)
 	assert(self.Webhook, "Webhook has not been set")
-	Arguments = Arguments or {}
+	assert(type(Content) == "string", "Message must be a string")
 
-	Arguments.Title = Arguments.Title or "Error"
-	Arguments.Message = Message
-	Arguments.Color = Arguments.Color or Color3.fromRGB(237, 66, 69)
-
-	return self:Message(Arguments)
+	return request({
+		Url = self.Webhook,
+		Method = "POST",
+		Headers = {
+			["Content-Type"] = "application/json"
+		},
+		Body = HttpService:JSONEncode({
+			content = Content
+		})
+	})
 end
 
-function Api:Warn(Message, Arguments)
+function Api:Test()
 	assert(self.Webhook, "Webhook has not been set")
-	Arguments = Arguments or {}
 
-	Arguments.Title = Arguments.Title or "Warning"
-	Arguments.Message = Message
-	Arguments.Color = Arguments.Color or Color3.fromRGB(250, 166, 26)
-
-	return self:Message(Arguments)
+	return self:Message("Webhook test successful.")
 end
 
-function Api:Log(Message, Arguments)
+function Api:QueueMessage(Content)
+	assert(type(Content) == "string", "Message must be a string")
+
+	table.insert(self.Queue, Content)
+end
+
+function Api:Flush()
 	assert(self.Webhook, "Webhook has not been set")
-	Arguments = Arguments or {}
 
-	Arguments.Title = Arguments.Title or "Log"
-	Arguments.Message = Message
-	Arguments.Color = Arguments.Color or Color3.fromRGB(88, 101, 242)
+	local Queue = self.Queue
+	table.clear(self.Queue)
 
-	return self:Message(Arguments)
+	for _, Content in ipairs(Queue) do
+		self:Message(Content)
+	end
 end
-
-
 
 return Api
