@@ -425,6 +425,11 @@ local Templates = {
         EnableCompacting = true,
         DisableCompactingSnap = false,
         SidebarCompacted = false,
+
+        --// Auto Compact (collapses when the mouse leaves the sidebar) \\--
+        AutoCompact = false,
+        AutoCompactDelay = 0.35, -- seconds the mouse must be away before collapsing
+        AutoCompactSpeed = 14,   -- glide speed, higher = faster
         MinContainerWidth = 256,
 
         --// Snapping \\--
@@ -12565,6 +12570,8 @@ function Library:CreateWindow(WindowInfo)
 
     --// Window Table \\--
     local Window = {}
+    Window.AutoCompact = WindowInfo.AutoCompact == true
+    Window.AutoCompactExpandedWidth = InitialLeftWidth
     local Fading = false
 
     local function SetUICorner(UICorner, Corner, HalfValue)
@@ -12816,6 +12823,10 @@ function Library:CreateWindow(WindowInfo)
         if WindowInfo.DisableCompactingSnap then
             IsCompact = Window:GetSidebarWidth() <= WindowInfo.CompactWidthActivation
         end
+        if Window.AutoCompact then
+            -- switch layout at the halfway point while gliding
+            IsCompact = Window:GetSidebarWidth() < (WindowInfo.SidebarCompactWidth + Window.AutoCompactExpandedWidth) / 2
+        end
 
         WindowTitle.Visible = not IsCompact
         if not WindowInfo.Icon then
@@ -12861,12 +12872,12 @@ function Library:CreateWindow(WindowInfo)
         UserHolder.Size = UDim2.new(0, Width - 12, 0, UserCardHeight)
         Container.Size = UDim2.new(1, -Width - 1, 1, -70)
 
-        if WindowInfo.EnableCompacting then
+        if WindowInfo.EnableCompacting or Window.AutoCompact then
             ApplyCompact()
         end
     
         RefreshWindowTitleSize()
-        if not IsCompact then
+        if not IsCompact and not Window.AutoCompact then
             LastExpandedWidth = Width
         end
     end
@@ -15911,7 +15922,7 @@ function Library:CreateWindow(WindowInfo)
         end)
 
         SidebarGrabber.InputBegan:Connect(function(Input: InputObject)
-            if not IsClickInput(Input) then
+            if not IsClickInput(Input) or Window.AutoCompact then
                 return
             end
 
@@ -15968,8 +15979,92 @@ function Library:CreateWindow(WindowInfo)
         end))
     end
 
+    --// Auto Compact controller \\--
+    local AutoTargetWidth = WindowInfo.SidebarCompactWidth
+    local AutoLeaveTime: number? = nil
+
+    function Window:SetAutoCompact(Enabled: boolean, Delay: number?, Speed: number?)
+        if typeof(Delay) == "number" then
+            WindowInfo.AutoCompactDelay = math.max(0, Delay)
+        end
+        if typeof(Speed) == "number" then
+            WindowInfo.AutoCompactSpeed = math.max(1, Speed)
+        end
+
+        Enabled = Enabled == true
+        if Window.AutoCompact == Enabled then
+            return
+        end
+
+        AutoLeaveTime = nil
+        if Enabled then
+            local Current = Window:GetSidebarWidth()
+            if Current > WindowInfo.SidebarCompactWidth then
+                Window.AutoCompactExpandedWidth = Current
+            end
+
+            Window.AutoCompact = true
+            AutoTargetWidth = WindowInfo.SidebarCompactWidth
+        else
+            Window.AutoCompact = false
+            LastExpandedWidth = Window.AutoCompactExpandedWidth
+            Window:SetSidebarWidth(Window.AutoCompactExpandedWidth)
+        end
+    end
+
+    function Window:IsAutoCompact()
+        return Window.AutoCompact
+    end
+
+    Library:GiveSignal(RunService.RenderStepped:Connect(function(dt)
+        if
+            Library.Unloaded
+            or not Window.AutoCompact
+            or Library.IsMobile -- no hover on touch devices
+            or not Library.Toggled
+            or Library.CantDragForced -- user is dragging/resizing something
+        then
+            return
+        end
+
+        local Origin = MainFrame.AbsolutePosition
+        local SidebarPixels = Window:GetSidebarWidth() * Library.DPIScale
+        local Hovered = Mouse.X >= Origin.X
+            and Mouse.X <= Origin.X + SidebarPixels
+            and Mouse.Y >= Origin.Y
+            and Mouse.Y <= Origin.Y + MainFrame.AbsoluteSize.Y
+
+        local Compact = WindowInfo.SidebarCompactWidth
+        local Expanded = Window.AutoCompactExpandedWidth
+
+        if Hovered then
+            AutoLeaveTime = nil
+            AutoTargetWidth = Expanded
+        elseif AutoTargetWidth ~= Compact then
+            AutoLeaveTime = AutoLeaveTime or os.clock()
+            if os.clock() - AutoLeaveTime >= (WindowInfo.AutoCompactDelay or 0.35) then
+                AutoTargetWidth = Compact
+                AutoLeaveTime = nil
+            end
+        end
+
+        local Current = Window:GetSidebarWidth()
+        if math.abs(Current - AutoTargetWidth) > 0.01 then
+            local Alpha = 1 - math.exp(-(WindowInfo.AutoCompactSpeed or 14) * dt)
+            local NewWidth = Current + (AutoTargetWidth - Current) * Alpha
+            if math.abs(AutoTargetWidth - NewWidth) < 0.5 then
+                NewWidth = AutoTargetWidth
+            end
+
+            Window:SetSidebarWidth(NewWidth)
+        end
+    end))
+
     Window:SetAlwaysOnTop(WindowInfo.AlwaysOnTop)
     if WindowInfo.EnableCompacting and WindowInfo.SidebarCompacted then
+        Window:SetSidebarWidth(WindowInfo.SidebarCompactWidth)
+    end
+    if Window.AutoCompact then
         Window:SetSidebarWidth(WindowInfo.SidebarCompactWidth)
     end
     if WindowInfo.AutoShow and not Library.ActiveLoading then
