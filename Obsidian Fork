@@ -259,6 +259,8 @@ local Library = {
     --// Fork additions \\--
     SmoothDragging = true,
     DragSmoothness = 22, -- higher = snappier, lower = floatier
+    IndicatorSmoothness = 16, -- speed of the sliding tab indicator
+    TabIndicatorTarget = nil,
 
     UserInfo = {
         Name = LocalPlayer.DisplayName,
@@ -4260,6 +4262,14 @@ function Library:AddTooltip(InfoStr: string, DisabledInfoStr: string, HoverInsta
 
     table.insert(Tooltips, TooltipLabel)
     return TooltipTable
+end
+
+function Library:UsesSlidingIndicator(): boolean
+    return Library.Animations ~= nil and Library.Animations.Interactions == true
+end
+
+function Library:SetTabIndicatorTarget(Button: GuiObject?)
+    Library.TabIndicatorTarget = Button
 end
 
 function Library:SetUserName(Name: string)
@@ -12477,6 +12487,64 @@ function Library:CreateWindow(WindowInfo)
         Library.WindowContainer = Container
     end
 
+    --// Sliding Tab Indicator (Animations.Interactions) \\--
+    if TabButtonsStyle.Indicator then
+        local SlideIndicator = New("Frame", {
+            AnchorPoint = Vector2.new(1, 0.5),
+            BackgroundColor3 = "AccentColor",
+            Size = UDim2.fromOffset(TabButtonsStyle.IndicatorWidth, TabButtonsStyle.IndicatorHeight),
+            Visible = false,
+            ZIndex = 3,
+            Parent = MainFrame,
+        })
+        New("UICorner", { CornerRadius = UDim.new(1, 0), Parent = SlideIndicator })
+
+        local CurrentY: number? = nil
+        Library:GiveSignal(RunService.RenderStepped:Connect(function(dt)
+            local Target = Library.TabIndicatorTarget
+            if
+                not Library:UsesSlidingIndicator()
+                or not Target
+                or not Target.Parent
+                or not MainFrame.Visible
+                or Target.AbsoluteSize.Y <= 0
+            then
+                SlideIndicator.Visible = false
+                CurrentY = nil
+                return
+            end
+
+            local Scale = Library.DPIScale
+            local Origin = MainFrame.AbsolutePosition
+            local CenterY = Target.AbsolutePosition.Y + Target.AbsoluteSize.Y / 2
+
+            -- hide while the target is scrolled out of the sidebar
+            if CenterY < Tabs.AbsolutePosition.Y or CenterY > Tabs.AbsolutePosition.Y + Tabs.AbsoluteSize.Y then
+                SlideIndicator.Visible = false
+                return
+            end
+
+            local TargetX = (Target.AbsolutePosition.X - Origin.X) / Scale - 2
+            local TargetY = (CenterY - Origin.Y) / Scale
+
+            if CurrentY == nil then
+                CurrentY = TargetY
+            else
+                CurrentY += (TargetY - CurrentY) * (1 - math.exp(-(Library.IndicatorSmoothness or 16) * dt))
+                if math.abs(TargetY - CurrentY) < 0.1 then
+                    CurrentY = TargetY
+                end
+            end
+
+            -- slight stretch while travelling
+            local Stretch = math.clamp(math.abs(TargetY - CurrentY) * 0.25, 0, 12)
+
+            SlideIndicator.Visible = true
+            SlideIndicator.Size = UDim2.fromOffset(TabButtonsStyle.IndicatorWidth, TabButtonsStyle.IndicatorHeight + Stretch)
+            SlideIndicator.Position = UDim2.fromOffset(TargetX, CurrentY)
+        end))
+    end
+
     local function LayoutUserInfo()
         if not UserHolder then return end
         UserTextHolder.Visible = not IsCompact
@@ -14279,9 +14347,12 @@ function Library:CreateWindow(WindowInfo)
                     BackgroundTransparency = Active and 0 or 1,
                 }):Play()
             end
+            if not ParentTab and Active then
+                Library:SetTabIndicatorTarget(TabButton)
+            end
             if TabIndicator then
                 TweenService:Create(TabIndicator, Library.TweenInfo, {
-                    BackgroundTransparency = Active and 0 or 1,
+                    BackgroundTransparency = (Active and not Library:UsesSlidingIndicator()) and 0 or 1,
                 }):Play()
             end
             TweenService:Create(TabLabel, Library.TweenInfo, {
@@ -14831,9 +14902,10 @@ function Library:CreateWindow(WindowInfo)
                 BackgroundTransparency = 0,
             }):Play()
 
+            Library:SetTabIndicatorTarget(TabButton)
             if TabIndicator then
                 TweenService:Create(TabIndicator, Library.TweenInfo, {
-                    BackgroundTransparency = 0,
+                    BackgroundTransparency = Library:UsesSlidingIndicator() and 1 or 0,
                 }):Play()
             end
 
@@ -15098,9 +15170,10 @@ function Library:CreateWindow(WindowInfo)
                 BackgroundTransparency = 0,
             }):Play()
 
+            Library:SetTabIndicatorTarget(TabButton)
             if TabIndicator then
                 TweenService:Create(TabIndicator, Library.TweenInfo, {
-                    BackgroundTransparency = 0,
+                    BackgroundTransparency = Library:UsesSlidingIndicator() and 1 or 0,
                 }):Play()
             end
 
